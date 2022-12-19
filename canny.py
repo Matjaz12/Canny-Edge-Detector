@@ -1,10 +1,11 @@
-import numpy as np
-import matplotlib.pyplot as plt
+import argparse
 import math
-from scipy.ndimage import gaussian_filter
+
+import matplotlib.pyplot as plt
+import numpy as np
 from PIL import Image
 from scipy import signal
-import argparse
+from scipy.ndimage import gaussian_filter
 
 
 def nonmaxima_supression(mag, angle):

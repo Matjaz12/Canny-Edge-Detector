@@ -12,6 +12,11 @@ Implementation of a canny edge detector.
 ## Usage
 You can run the code using: `python3 canny.py <in_image_path> <in_image_path> <display>`.
 
-For example the following reads image 0014.png and saves detected edges into 0014E.png
+For example the following reads image ./data/0014.png and saves detected edges into ./data/0014E.png
 
-`python3 canny.py 0014.png 0014E.png 0`
+`python3 canny.py ./data/0014.png ./data/0014E.png 0`
+
+## Evaluation
+
+To evaluate the detector simply run `python3 eval.py`. This computes and saves edges
+for each image in the ./data directory.
