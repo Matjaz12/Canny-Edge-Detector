@@ -8,9 +8,13 @@ In order to run the program user must do the following:
 
 1. Create a virtual environment: 
     `python3 -m venv venv`
-1. Activate virtual environment:
+
+2. Activate virtual environment:
+
     `. venv/bin/activate`
-2. Install dependencies:
+
+3. Install dependencies:
+
     `pip install -r requirements.txt`
 
 
