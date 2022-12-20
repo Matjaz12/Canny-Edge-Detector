@@ -44,7 +44,7 @@ def nonmaxima_supression(mag, angle):
 def otsus_method(img):
     max_var, best_thresh = 0.0, 0.0
 
-    thresholds = range(int(np.max(img)) + 1)
+    thresholds = np.arange(np.max(img), step=1.0/256)
 
     for thresh in thresholds:
         # Compute the between class variance
@@ -70,32 +70,37 @@ def otsus_method(img):
     return best_thresh
 
 
-def link_edges(g_nh, g_nl):
-    g_nh = np.pad(g_nh, ((1, 1), (1, 1)), "constant")
-    m, n = g_nh.shape
+MAX_DEPTH = 10000
+def find_conn_weak_edges(edges, row, col, depth=0):
+    if depth > MAX_DEPTH:
+        return
 
-    for i in range(1, m - 1, 1):
-        for j in range(1, n - 1, 1):
-            if g_nh[i, j] == 0.0:
-                continue
+    m, n = edges.shape
 
-            # Take a sub region of the (g_nl) image
-            win = g_nl[i - 1 : i + 2, j - 1 : j + 2]
+    # Loak at the surrounding 8 pixels
+    for i in range(-1, 2, 1):
+        for j in range(-1, 2, 1):
+            
+            # Check if there is a weak edge nearby
+            if row + i >= 0 and row + i < m and col + j >= 0 and col + j < n:
+                if edges[row + i, col + j] > 0 and edges[row + i, col + j] < 1:
+                    depth += 1
 
-            # Find where pixel with a non zero value in the sub region
-            idxs = np.where(win != 0.0)
-            idxs = (idxs[0] + (i - 1), idxs[1] + (j - 1))
-
-            # Mark as the strong pixel
-            g_nh[idxs] = 1.0
-
-    g_nh = g_nh[1: m - 1, 1 : n - 1]
-
-    return g_nh 
+                    edges[row + i, col + j] = 1 # label weak edge as legit edge
+                    find_conn_weak_edges(edges, row, col, depth)
 
 
-def canny(img, display=True):
+def canny(img, display=True, threshold_scale=1.0):
     SIGMA = 2
+
+    if display:
+        plt.figure()
+        plt.imshow(img, cmap="gray")
+        plt.title(f"(a) Original image")
+        plt.xticks([])
+        plt.yticks([])
+        plt.savefig('./imgs/intermediate1.png', bbox_inches='tight')
+        plt.show()
 
     # (1) Apply Gaussian smoothing
     img = gaussian_filter(img, sigma=SIGMA)
@@ -103,12 +108,13 @@ def canny(img, display=True):
     if display:
         plt.figure()
         plt.imshow(img, cmap="gray")
-        plt.title(f"Image filtered with a gaussian kernel (sigma: {SIGMA})")
+        plt.title(f"(b) Smoothed image")
         plt.xticks([])
         plt.yticks([])
+        plt.savefig('./imgs/intermediate2.png', bbox_inches='tight')
         plt.show()
 
-    # (2) Compute the gradient (i.e partial derivative w.r.t to x and y)
+    # (2) Compute the gradient (i.e partial derivative w.r.t to x and y axis)
     kernel_x = np.array([
         [-1, 0, 1],
         [-2, 0, 2],
@@ -129,74 +135,67 @@ def canny(img, display=True):
     angle = np.arctan2(g_y, g_x) * 180 / np.pi
 
     if display:
-        fig, (ax1, ax2) = plt.subplots(1, 2)
-
-        ax1.imshow(mag, cmap="gray");
-        ax1.set_xticks([])
-        ax1.set_yticks([])
-        ax1.set_title("magnitude image")
-
-        ax2.imshow(angle, cmap="gray");
-        ax2.set_xticks([])
-        ax2.set_yticks([])
-        ax2.set_title("angle image")
-
+        plt.figure()
+        plt.imshow(mag, cmap="gray")
+        plt.title(f"(c) Magnitude image")
+        plt.xticks([])
+        plt.yticks([])
+        plt.savefig('./imgs/intermediate3.png', bbox_inches='tight')
         plt.show()
 
-    # (4) Remove "weak" edges using non maxima supression
+        plt.figure()
+        plt.imshow(angle, cmap="gray")
+        plt.title(f"(d) Angle image")
+        plt.xticks([])
+        plt.yticks([])
+        plt.savefig('./imgs/intermediate4.png', bbox_inches='tight')
+        plt.show()
+
+    # (4) Thin edges using non maxima supression
     g_n = nonmaxima_supression(mag, angle)
 
     if display:
         plt.figure()
         plt.imshow(g_n, cmap="gray")
-        plt.title(f"Output of non-maxima supression")
+        plt.title(f"(e) Edges after non-maxima supression")
         plt.xticks([])
         plt.yticks([])
+        plt.savefig('./imgs/intermediate5.png', bbox_inches='tight')
         plt.show()
 
-    # (5) determine the optimal threshold using Otsu's method
-    thresh_high = otsus_method(g_n)
+
+    # (5) Determine the optimal threshold using Otsu's method
+    g_n = (g_n - g_n.min()) / (g_n.max() - g_n.min()) # normalize the image
+    thresh_high = threshold_scale * otsus_method(g_n)
     thresh_low = 0.5 * thresh_high
 
     if display:
         print(f"thresh_high: {thresh_high}, thresh_low: {thresh_low}")
 
-    # (6) compute strong and weak edge pixels
+    # (6) Label strong and weak edges
+    edges = g_n.copy()
 
-    g_nh = np.zeros_like(g_n) # strong edges
-    g_nh[np.where(g_n > thresh_high)] = 1.0
+    edges[edges > thresh_high] = 1  # label all edges above thresh_high as legit edges
+    edges[edges < thresh_low] = 0   # remove all edges bellow thresh_low
 
-    g_nl = np.zeros_like(g_n) # weak edges
-    g_nl[np.where(g_n > thresh_low)] = 1.0
-    g_nl = g_nl - g_nh
+    # (7) Link edges using 8-connectivity
+    rows, cols = np.where(edges == 1)
+    for s_row, s_col in zip(rows, cols):
+        find_conn_weak_edges(edges, s_row, s_col)
 
-    if display:
-        fig, (ax1, ax2) = plt.subplots(1, 2)
-        
-        ax1.imshow(g_nh, cmap="gray");
-        ax1.set_xticks([])
-        ax1.set_yticks([])
-        ax1.set_title("Strong edges")
-
-        ax2.imshow(g_nl, cmap="gray");
-        ax2.set_xticks([])
-        ax2.set_yticks([])
-        ax2.set_title("Weak edges")
-
-        plt.show()
-
-    # (7) link edges using 8-connectivity
-    edges = link_edges(g_nh, g_nl)
+    edges[(edges > 0) & (edges < 1)] = 0 # remove all remaining weak edges 
 
     if display:
         plt.figure()
         plt.imshow(edges, cmap="gray")
-        plt.title(f"Detected edges")
+        plt.title(f"(f) Detected edges")
         plt.xticks([])
         plt.yticks([])
+        plt.savefig('./imgs/intermediate6.png', bbox_inches='tight')
         plt.show()
 
     return edges
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -206,13 +205,15 @@ if __name__ == "__main__":
 
     parser.add_argument("in_image", type=str, help="Input image path")
     parser.add_argument("out_image", type=str, help="Output image path")
-    parser.add_argument("dispay", type=int, help="Display / Don't display intermediate results")
+    parser.add_argument("dispay", type=int, default=0, help="Display / Don't display intermediate results")
+    parser.add_argument("threshold_scale", type=float, default=1.0, help="Factor between 0 and 1 by which the high threshold (determined using the Otsu's method) will be scaled.")
+
 
     args = parser.parse_args()
-    print(args.dispay)
+    # print(args.dispay)
 
     image = np.array(Image.open(args.in_image).convert("L"))
-    edges = canny(image, args.dispay) * 255
+    edges = canny(image, args.dispay, args.threshold_scale) * 255
 
     edges = Image.fromarray(edges.astype('uint8'))
     edges.save(args.out_image)
