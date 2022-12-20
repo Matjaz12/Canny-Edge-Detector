@@ -6,7 +6,8 @@ In this work we implement a Canny Edge Detector. We use the Otsu's method to rou
 
 In order to run the program user must do the following:
 
-1. Create a virtual environment: 
+1. Create a virtual environment:
+
     `python3 -m venv venv`
 
 2. Activate virtual environment:
